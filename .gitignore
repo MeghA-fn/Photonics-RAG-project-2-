@@ -1,0 +1,12 @@
+.env
+venv/
+__pycache__/
+*.pyc
+
+data/raw/
+data/processed/
+data/chroma_db/
+
+vector_db/
+
+evaluation/*_results.csv

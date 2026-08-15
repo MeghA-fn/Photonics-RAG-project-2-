@@ -1,0 +1,11 @@
+question,expected_answer
+"What is stimulated emission?","Stimulated emission occurs when a photon induces an excited atom or electron to transition to a lower energy state, producing another photon with the same frequency, phase, and polarization."
+"What is spontaneous emission?","Spontaneous emission is the process in which an excited atom returns to a lower energy state and emits a photon without being induced by an external photon."
+"What is population inversion?","Population inversion is a condition in which more particles occupy an excited energy state than a lower energy state."
+"What is total internal reflection?","Total internal reflection occurs when light traveling in a denser medium reaches a boundary with a less dense medium at an angle greater than the critical angle."
+"What is an optical fiber?","An optical fiber is a waveguide that transmits light through a core surrounded by cladding."
+"What is mode coupling?","Mode coupling is the transfer of energy from one propagation mode to another due to perturbations in the optical waveguide."
+"What is a laser?","A laser produces amplified light through stimulated emission."
+"What is an optical amplifier?","An optical amplifier amplifies an optical signal without first converting it into an electrical signal."
+"What is a semiconductor laser?","A semiconductor laser is a laser device in which stimulated emission occurs in a semiconductor active region."
+"What is amplified spontaneous emission?","Amplified spontaneous emission is spontaneous emission that is subsequently amplified through stimulated emission in an active medium."
