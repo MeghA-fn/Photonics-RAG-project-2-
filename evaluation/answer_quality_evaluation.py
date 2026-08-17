@@ -1,10 +1,8 @@
-
 from pathlib import Path
 import sys
 import os
 import re
 import time
-import json
 import subprocess
 import pandas as pd
 import google.generativeai as genai
@@ -73,12 +71,12 @@ model = genai.GenerativeModel(MODEL_NAME)
 
 TOP_K = 5
 
-# IMPORTANT:
-# Gemini is used ONLY for answer generation.
-# Gemma 3:4B is used ONLY for answer evaluation.
-#
-# Pipeline:
-# Hybrid RRF -> Gemini -> Gemma evaluator
+OLLAMA_EXE = (
+    r"C:\Users\megha\AppData\Local\Programs\Ollama\ollama.exe"
+)
+
+OLLAMA_MODEL = "llama3.2:1b"
+
 
 # ============================================================
 # SAFE TEXT EXTRACTION
@@ -158,47 +156,6 @@ Page: {page}
 
 
 # ============================================================
-# EXTRACT SCORE
-# ============================================================
-
-def extract_score(text, field_name):
-
-    pattern = rf"{field_name}\s*:\s*([1-5])"
-
-    match = re.search(
-        pattern,
-        text,
-        re.IGNORECASE
-    )
-
-    if match:
-        return match.group(1)
-
-    return ""
-
-
-# ============================================================
-# EXTRACT REASON
-# ============================================================
-
-def extract_reason(text):
-
-    match = re.search(
-        r"Reason\s*:\s*(.*)",
-        text,
-        re.IGNORECASE | re.DOTALL
-    )
-
-    if match:
-
-        reason = match.group(1).strip()
-
-        return reason
-
-    return ""
-
-
-# ============================================================
 # GENERATE ANSWER USING GEMINI
 # ============================================================
 
@@ -227,19 +184,28 @@ Context:
 Answer:
 """
 
-    response = model.generate_content(prompt)
+    try:
 
-    if not response or not response.text:
+        response = model.generate_content(prompt)
+
+        if not response or not response.text:
+            return ""
+
+        return response.text.strip()
+
+    except Exception as e:
+
+        print("\nERROR generating answer:")
+        print(e)
+
         return ""
 
-    return response.text.strip()
-
 
 # ============================================================
-# EVALUATE ANSWER USING LOCAL GEMMA
+# EVALUATE ANSWER USING LOCAL LLAMA
 # ============================================================
 
-def evaluate_with_gemma(
+def evaluate_with_llama(
     question,
     context,
     answer
@@ -259,45 +225,44 @@ Retrieved Context:
 Generated Answer:
 {answer}
 
-Evaluate the answer on these four criteria:
+Evaluate these four criteria:
 
-1. Faithfulness:
+1. FAITHFULNESS:
 Is the answer supported by the retrieved context?
 
-2. Relevance:
+2. RELEVANCE:
 Does the answer directly answer the question?
 
-3. Completeness:
+3. COMPLETENESS:
 Does the answer include the important information available
 in the retrieved context?
 
-4. Overall:
+4. OVERALL:
 Give an overall quality score.
 
-Give each score from 1 to 5.
+Give every score from 1 to 5.
 
-Return ONLY valid JSON.
-Do not use markdown.
-Do not use code fences.
+Return ONLY ONE LINE in EXACTLY this format:
 
-Use exactly this structure:
+FAITHFULNESS=5 RELEVANCE=5 COMPLETENESS=5 OVERALL=5
 
-{{
-  "faithfulness": 1,
-  "relevance": 1,
-  "completeness": 1,
-  "overall_score": 1,
-  "reason": "short explanation"
-}}
+Rules:
+
+- Replace the numbers with your actual scores.
+- All scores must be integers from 1 to 5.
+- Do not add explanations.
+- Do not use JSON.
+- Do not use markdown.
+- Do not add any other text.
 """
 
     try:
 
         result = subprocess.run(
             [
-                r"C:\Users\megha\AppData\Local\Programs\Ollama\ollama.exe",
+                OLLAMA_EXE,
                 "run",
-                "gemma3:4b",
+                OLLAMA_MODEL,
                 prompt
             ],
             capture_output=True,
@@ -309,50 +274,98 @@ Use exactly this structure:
 
         raw_output = result.stdout.strip()
 
-        # Remove possible markdown fences
-        raw_output = re.sub(
-            r"```json\s*",
-            "",
+        print("\nLlama evaluation output:")
+        print(raw_output)
+
+        # ----------------------------------------------------
+        # Extract four scores
+        # ----------------------------------------------------
+
+        faithfulness_match = re.search(
+            r"FAITHFULNESS\s*=\s*([1-5])",
             raw_output,
-            flags=re.IGNORECASE
+            re.IGNORECASE
         )
 
-        raw_output = re.sub(
-            r"```\s*$",
-            "",
-            raw_output
+        relevance_match = re.search(
+            r"RELEVANCE\s*=\s*([1-5])",
+            raw_output,
+            re.IGNORECASE
         )
 
-        # Remove control characters that previously
-        # caused JSON parsing errors.
-        raw_output = re.sub(
-            r"[\x00-\x08\x0B\x0C\x0E-\x1F]",
-            " ",
-            raw_output
+        completeness_match = re.search(
+            r"COMPLETENESS\s*=\s*([1-5])",
+            raw_output,
+            re.IGNORECASE
         )
 
-        evaluation = json.loads(
-            raw_output
+        overall_match = re.search(
+            r"OVERALL\s*=\s*([1-5])",
+            raw_output,
+            re.IGNORECASE
         )
+
+        faithfulness = (
+            faithfulness_match.group(1)
+            if faithfulness_match
+            else ""
+        )
+
+        relevance = (
+            relevance_match.group(1)
+            if relevance_match
+            else ""
+        )
+
+        completeness = (
+            completeness_match.group(1)
+            if completeness_match
+            else ""
+        )
+
+        overall = (
+            overall_match.group(1)
+            if overall_match
+            else ""
+        )
+
+        # ----------------------------------------------------
+        # Validate extraction
+        # ----------------------------------------------------
+
+        if not all([
+            faithfulness,
+            relevance,
+            completeness,
+            overall
+        ]):
+
+            return {
+                "faithfulness": "",
+                "relevance": "",
+                "completeness": "",
+                "overall": "",
+                "reason":
+                    f"Could not parse Llama output: {raw_output}"
+            }
 
         return {
-            "faithfulness":
-                evaluation.get("faithfulness", ""),
+            "faithfulness": faithfulness,
+            "relevance": relevance,
+            "completeness": completeness,
+            "overall": overall,
+            "reason": "Evaluated by Llama 3.2:1B."
+        }
 
-            "relevance":
-                evaluation.get("relevance", ""),
+    except subprocess.TimeoutExpired:
 
-            # "correctness":
-            #     evaluation.get("correctness", ""),    
-
-            "completeness":
-                evaluation.get("completeness", ""),
-
-            "overall":
-                evaluation.get("overall_score", ""),
-
+        return {
+            "faithfulness": "",
+            "relevance": "",
+            "completeness": "",
+            "overall": "",
             "reason":
-                evaluation.get("reason", "")
+                "Llama evaluation timed out."
         }
 
     except Exception as e:
@@ -363,7 +376,7 @@ Use exactly this structure:
             "completeness": "",
             "overall": "",
             "reason":
-                f"Gemma evaluation error: {e}"
+                f"Llama evaluation error: {e}"
         }
 
 
@@ -390,490 +403,275 @@ def main():
         f"evaluation questions."
     )
 
-    print(
-        "\nGemini requests per question: 1"
-    )
-
-    print(
-        "Maximum Gemini requests for this run: "
-        f"{len(questions_df)}"
-    )
-
+    # --------------------------------------------------------
+    # RESULTS
+    # --------------------------------------------------------
 
     results = []
 
+    processed = 0
+    answers_generated = 0
 
-    # ========================================================
+    # --------------------------------------------------------
     # PROCESS QUESTIONS
-    # ========================================================
+    # --------------------------------------------------------
 
     for index, row in questions_df.iterrows():
 
         question = str(
             row["question"]
-        )
+        ).strip()
 
-        expected_answer = str(
-            row["expected_answer"]
-        )
+        processed += 1
 
-        # expected_document = str(
-        #     row["expected_document"]
-        # )
-
-        # expected_page = str(
-        #     row["expected_page"]
-        # )
-
-
-        print("\n" + "=" * 80)
-
+        print("\n")
+        print("=" * 80)
         print(
-            f"Question {index + 1}/"
-            f"{len(questions_df)}"
+            f"QUESTION {index + 1}/{len(questions_df)}"
         )
-
         print("=" * 80)
 
         print(
-            f"Question: {question}"
+            f"\nQuestion: {question}"
         )
 
+        # ----------------------------------------------------
+        # RETRIEVAL
+        # ----------------------------------------------------
 
         try:
 
-            # =================================================
-            # RETRIEVAL
-            # =================================================
-
-            print(
-                "\nRunning hybrid retrieval..."
-            )
-
-            retrieval_results = hybrid_search(
+            retrieved_results = hybrid_search(
                 question,
                 top_k=TOP_K
             )
 
+        except TypeError:
 
-            # -------------------------------------------------
-            # SAFETY CHECK
-            # -------------------------------------------------
+            try:
 
-            if not isinstance(
-                retrieval_results,
-                list
-            ):
-
-                retrieval_results = []
-
-
-            retrieval_results = [
-                item
-                for item in retrieval_results
-                if isinstance(item, dict)
-            ]
-
-
-            # =================================================
-            # BUILD CONTEXT
-            # =================================================
-
-            context = build_context(
-                retrieval_results
-            )
-
-
-            # =================================================
-            # RETRIEVED SOURCES
-            # =================================================
-
-            retrieved_documents = []
-
-            retrieved_pages = []
-
-
-            for item in retrieval_results:
-
-                document = get_document(
-                    item
+                retrieved_results = hybrid_search(
+                    question,
+                    TOP_K
                 )
 
-                page = get_page(
-                    item
+            except Exception as e:
+
+                print(
+                    f"\nRetrieval error: {e}"
                 )
 
+                retrieved_results = []
 
-                if document:
-
-                    retrieved_documents.append(
-                        document
-                    )
-
-
-                if page:
-
-                    retrieved_pages.append(
-                        page
-                    )
-
-
-            # # =================================================
-            # # EXPECTED SOURCE CHECK
-            # # =================================================
-
-            # expected_source_found = "NO"
-
-
-            # for item in retrieval_results:
-
-            #     document = get_document(
-            #         item
-            #     )
-
-            #     page = get_page(
-            #         item
-            #     )
-
-
-            #     if (
-            #         document == expected_document
-            #         and page == expected_page
-            #     ):
-
-            #         expected_source_found = "YES"
-
-            #         break
-
-
-            # =================================================
-            # GEMINI
-            # =================================================
+        except Exception as e:
 
             print(
-                "\nGenerating answer using Gemini..."
+                f"\nRetrieval error: {e}"
             )
 
-            answer = generate_answer(
-                question,
-                context
-            )
+            retrieved_results = []
+
+        # ----------------------------------------------------
+        # BUILD CONTEXT
+        # ----------------------------------------------------
+
+        context = build_context(
+            retrieved_results
+        )
+
+        # ----------------------------------------------------
+        # GENERATE ANSWER
+        # ----------------------------------------------------
+
+        print(
+            "\nGenerating answer using Gemini..."
+        )
+
+        answer = generate_answer(
+            question,
+            context
+        )
+
+        if answer:
+
+            answers_generated += 1
+
+        print(
+            f"\nAnswer:\n{answer}"
+        )
+
+        # ----------------------------------------------------
+        # EVALUATE USING LLAMA
+        # ----------------------------------------------------
+
+        if answer:
 
             print(
-                "\nEvaluating answer using local Gemma 3:4B..."
+                "\nEvaluating answer using "
+                "Llama 3.2:1B..."
             )
 
-            evaluation = evaluate_with_gemma(
+            evaluation = evaluate_with_llama(
                 question,
                 context,
                 answer
             )
 
+        else:
 
-            # =================================================
-            # PRINT ANSWER
-            # =================================================
+            evaluation = {
+                "faithfulness": "",
+                "relevance": "",
+                "completeness": "",
+                "overall": "",
+                "reason":
+                    "Answer generation failed."
+            }
 
-            print(
-                "\nANSWER:"
-            )
+        # ----------------------------------------------------
+        # DISPLAY EVALUATION
+        # ----------------------------------------------------
 
-            print(answer)
+        print("\nANSWER QUALITY:")
 
+        print(
+            f"Relevance     : "
+            f"{evaluation['relevance']}"
+        )
 
-            # =================================================
-            # PRINT SCORES
-            # =================================================
+        print(
+            f"Completeness  : "
+            f"{evaluation['completeness']}"
+        )
 
-            print(
-                "\nANSWER QUALITY:"
-            )
+        print(
+            f"Faithfulness  : "
+            f"{evaluation['faithfulness']}"
+        )
 
-            print(
-                f"Relevance     : "
-                f"{evaluation['relevance']}"
-            )
+        print(
+            f"Overall       : "
+            f"{evaluation['overall']}"
+        )
 
-            # print(
-            #     f"Correctness   : "
-            #     f"{evaluation['correctness']}"
-            # )
+        print(
+            f"Reason        : "
+            f"{evaluation['reason']}"
+        )
 
-            print(
-                f"Completeness  : "
-                f"{evaluation['completeness']}"
-            )
+        # ----------------------------------------------------
+        # SAVE RESULT
+        # ----------------------------------------------------
 
-            print(
-                f"Faithfulness  : "
-                f"{evaluation['faithfulness']}"
-            )
-
-            print(
-                f"Overall       : "
-                f"{evaluation['overall']}"
-            )
-
-            print(
-                f"Reason        : "
-                f"{evaluation['reason']}"
-            )
-
-
-            # =================================================
-            # SAVE RESULT
-            # =================================================
-
-            results.append({
-
+        results.append(
+            {
                 "question":
                     question,
-
-                # "expected_document":
-                #     expected_document,
-
-                # "expected_page":
-                #     expected_page,
-
-                "retrieved_documents":
-                    " | ".join(
-                        retrieved_documents
-                    ),
-
-                "retrieved_pages":
-                    " | ".join(
-                        retrieved_pages
-                    ),
-
-                # "expected_source_found":
-                #     expected_source_found,
 
                 "answer":
                     answer,
 
+                "faithfulness":
+                    evaluation["faithfulness"],
+
                 "relevance":
                     evaluation["relevance"],
 
-                # "correctness":
-                #     evaluation["correctness"],
-
                 "completeness":
                     evaluation["completeness"],
-
-                "faithfulness":
-                    evaluation["faithfulness"],
 
                 "overall_score":
                     evaluation["overall"],
 
                 "reason":
                     evaluation["reason"]
-            })
+            }
+        )
 
-
-        except Exception as e:
-
-            print(
-                "\nERROR:"
-            )
-
-            print(e)
-
-
-            results.append({
-
-                "question":
-                    question,
-
-                # "expected_document":
-                #     expected_document,
-
-                # "expected_page":
-                #     expected_page,
-
-                "retrieved_documents":
-                    "",
-
-                "retrieved_pages":
-                    "",
-
-                # "expected_source_found":
-                #     "ERROR",
-
-                "answer":
-                    "",
-
-                "relevance":
-                    "",
-
-                # "correctness":
-                #     "",
-
-                "completeness":
-                    "",
-
-                "faithfulness":
-                    "",
-
-                "overall_score":
-                    "",
-
-                "reason":
-                    str(e)
-            })
-
-
-            # -------------------------------------------------
-            # If Gemini quota is exhausted, stop immediately.
-            # -------------------------------------------------
-
-            if "429" in str(e):
-
-                print(
-                    "\nStopping because Gemini quota "
-                    "has been exhausted."
-                )
-
-                break
-
+        # Small delay to avoid excessive requests
+        time.sleep(1)
 
     # ========================================================
-    # SAVE RESULTS
+    # SAVE CSV
     # ========================================================
 
     results_df = pd.DataFrame(
         results
     )
 
-
     results_df.to_csv(
         RESULTS_FILE,
-        index=False,
-        encoding="utf-8-sig"
+        index=False
     )
 
-
     # ========================================================
-    # SUMMARY
+    # CALCULATE AVERAGE SCORE
     # ========================================================
-
-    if len(results_df) == 0:
-
-        print(
-            "\nNo evaluation results were generated."
-        )
-
-        return
-
 
     numeric_scores = pd.to_numeric(
         results_df["overall_score"],
         errors="coerce"
     )
 
+    valid_scores = numeric_scores.dropna()
 
-    average_score = numeric_scores.mean()
+    if len(valid_scores) > 0:
 
+        average_score = (
+            valid_scores.mean()
+        )
 
-    # successful = (
-    #     results_df[
-    #         "expected_source_found"
-    #     ] != "ERROR"
-    # ).sum()
+        average_display = (
+            f"{average_score:.2f}/5"
+        )
 
+    else:
 
-    # source_found = (
-    #     results_df[
-    #         "expected_source_found"
-    #     ] == "YES"
-    # ).sum()
-
-
-    answered = (
-        results_df["answer"]
-        .fillna("")
-        .str.strip()
-        .ne("")
-    ).sum()
-
+        average_display = "N/A"
 
     # ========================================================
-    # FINAL OUTPUT
+    # FINAL SUMMARY
     # ========================================================
 
     print("\n")
-
     print("=" * 80)
-
     print(
         "ANSWER QUALITY EVALUATION COMPLETE"
     )
-
     print("=" * 80)
-
 
     print(
         f"Total questions       : "
         f"{len(questions_df)}"
     )
 
-
     print(
         f"Processed             : "
-        f"{len(results_df)}"
+        f"{processed}"
     )
-
-
-    # print(
-    #     f"Successful            : "
-    #     f"{successful}"
-    # )
-
 
     print(
         f"Answers generated     : "
-        f"{answered}"
+        f"{answers_generated}"
     )
-
-
-    # print(
-    #     f"Expected source found: "
-    #     f"{source_found}/{len(results_df)}"
-    # )
-
-
-    if pd.notna(average_score):
-
-        print(
-            f"Average answer score : "
-            f"{average_score:.2f}/5"
-        )
-
-    else:
-
-        print(
-            "Average answer score : "
-            "N/A"
-        )
-
 
     print(
-        "\nResults saved to:"
+        f"Average answer score  : "
+        f"{average_display}"
     )
+
+    print("\nResults saved to:")
 
     print(
         RESULTS_FILE
     )
 
-
     print("=" * 80)
 
 
 # ============================================================
-# RUN
+# ENTRY POINT
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
-
