@@ -1,25 +1,40 @@
 import os
+import time
 from dotenv import load_dotenv
 from google import genai
-import time
 
-# Load .env
+# ============================================================
+# LOAD ENVIRONMENT
+# ============================================================
+
 load_dotenv()
 
-# Read API key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
     raise ValueError("Gemini API Key not found in .env")
 
-# Create Gemini client
-client = genai.Client(api_key=GEMINI_API_KEY)
 
+# ============================================================
+# GEMINI CLIENT
+# ============================================================
+
+client = genai.Client(
+    api_key=GEMINI_API_KEY
+)
+
+
+# ============================================================
+# GENERATE ANSWER
+# ============================================================
 
 def generate_answer(prompt):
+
     """
-    Sends the prompt to Gemini and returns the generated answer.
-    Retries automatically if Gemini temporarily returns a server error.
+    Generate an answer using Gemini 3.6 Flash.
+
+    Retries only temporary failures.
+    Quota errors are reported immediately.
     """
 
     max_retries = 3
@@ -29,27 +44,51 @@ def generate_answer(prompt):
         try:
 
             response = client.models.generate_content(
-                model="gemini-flash-latest",
+                model="gemini-3.6-flash",
                 contents=prompt
             )
 
-            return response.text
+            if not response or not response.text:
+                raise RuntimeError(
+                    "Gemini returned an empty response."
+                )
+
+            return response.text.strip()
 
         except Exception as e:
+
+            error_message = str(e)
 
             print(
                 f"\nGemini request failed "
                 f"(attempt {attempt + 1}/{max_retries})"
             )
 
-            print(f"Error: {e}")
+            print(f"Error: {error_message}")
+
+            # ------------------------------------------------
+            # DO NOT RETRY QUOTA ERRORS
+            # ------------------------------------------------
+
+            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+
+                raise RuntimeError(
+                    "Gemini API quota has been exhausted. "
+                    "Please wait for the quota to reset or "
+                    "check your Gemini API billing/quota."
+                ) from e
+
+            # ------------------------------------------------
+            # RETRY TEMPORARY ERRORS
+            # ------------------------------------------------
 
             if attempt < max_retries - 1:
 
                 wait_time = 5 * (attempt + 1)
 
                 print(
-                    f"Retrying Gemini in {wait_time} seconds..."
+                    f"Retrying Gemini in "
+                    f"{wait_time} seconds..."
                 )
 
                 time.sleep(wait_time)
@@ -59,13 +98,16 @@ def generate_answer(prompt):
                 raise
 
 
-# -------------------------
-# Test Gemini
-# -------------------------
+# ============================================================
+# DIRECT TEST
+# ============================================================
+
 if __name__ == "__main__":
 
     prompt = """
 You are a Photonics Research Assistant.
+
+Answer using the supplied context.
 
 Question:
 What is stimulated emission?
@@ -79,15 +121,3 @@ Answer briefly.
     print("GEMINI RESPONSE")
     print("=" * 80)
     print(answer)
-
-
-# import os
-# from dotenv import load_dotenv
-# from google import genai
-
-# load_dotenv()
-
-# client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-# for model in client.models.list():
-#     print(model.name)

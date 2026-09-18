@@ -1,677 +1,1588 @@
-from pathlib import Path
-import sys
+# from pathlib import Path
+# import sys
+# import os
+# import re
+# import time
+# import subprocess
+# import pandas as pd
+# import google.generativeai as genai
+# from dotenv import load_dotenv
+
+# load_dotenv()
+
+
+# # ============================================================
+# # PROJECT ROOT
+# # ============================================================
+
+# PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# if str(PROJECT_ROOT) not in sys.path:
+#     sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# # ============================================================
+# # IMPORT HYBRID RETRIEVER
+# # ============================================================
+
+# from app.retrieval.hybrid_retriever import hybrid_search
+
+
+# # ============================================================
+# # FILE PATHS
+# # ============================================================
+
+# QUESTIONS_FILE = (
+#     PROJECT_ROOT
+#     / "evaluation"
+#     / "rag_evaluation_questions.csv"
+# )
+
+# RESULTS_FILE = (
+#     PROJECT_ROOT
+#     / "evaluation"
+#     / "answer_quality_results.csv"
+# )
+
+
+# # ============================================================
+# # GEMINI CONFIGURATION
+# # ============================================================
+
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# if not GEMINI_API_KEY:
+#     raise RuntimeError(
+#         "GEMINI_API_KEY is not set.\n"
+#         "Set it in PowerShell before running this script."
+#     )
+
+# genai.configure(api_key=GEMINI_API_KEY)
+
+# MODEL_NAME = "gemini-3.6-flash"
+
+# model = genai.GenerativeModel(MODEL_NAME)
+
+
+# # ============================================================
+# # SETTINGS
+# # ============================================================
+
+# TOP_K = 5
+
+# OLLAMA_EXE = (
+#     r"C:\Users\megha\AppData\Local\Programs\Ollama\ollama.exe"
+# )
+
+# OLLAMA_MODEL = "llama3.2:1b"
+
+
+# # ============================================================
+# # SAFE TEXT EXTRACTION
+# # ============================================================
+
+# def get_text(item):
+
+#     if not isinstance(item, dict):
+#         return ""
+
+#     return str(
+#         item.get("text")
+#         or item.get("document")
+#         or item.get("chunk")
+#         or ""
+#     )
+
+
+# def get_document(item):
+
+#     if not isinstance(item, dict):
+#         return ""
+
+#     return str(
+#         item.get("document_name")
+#         or item.get("source")
+#         or ""
+#     )
+
+
+# def get_page(item):
+
+#     if not isinstance(item, dict):
+#         return ""
+
+#     value = (
+#         item.get("page_number")
+#         or item.get("page")
+#         or ""
+#     )
+
+#     return str(value)
+
+
+# # ============================================================
+# # BUILD CONTEXT
+# # ============================================================
+
+# def build_context(results):
+
+#     context_parts = []
+
+#     for rank, item in enumerate(
+#         results[:TOP_K],
+#         start=1
+#     ):
+
+#         text = get_text(item)
+#         document = get_document(item)
+#         page = get_page(item)
+
+#         if not text:
+#             continue
+
+#         context_parts.append(
+#             f"""
+# SOURCE {rank}
+
+# Document: {document}
+# Page: {page}
+
+# {text}
+# """
+#         )
+
+#     return "\n".join(context_parts)
+
+
+# # ============================================================
+# # GENERATE ANSWER USING GEMINI
+# # ============================================================
+
+# def generate_answer(question, context):
+
+#     prompt = f"""
+# You are a scientific assistant specialized in photonics.
+
+# Answer the user's question using ONLY the supplied context.
+
+# Do not use outside knowledge.
+
+# If the context does not contain enough information to answer
+# the question, say:
+
+# "I don't know based on the provided documents."
+
+# Keep the answer concise and scientifically accurate.
+
+# Question:
+# {question}
+
+# Context:
+# {context}
+
+# Answer:
+# """
+
+#     try:
+
+#         response = model.generate_content(prompt)
+
+#         if not response or not response.text:
+#             return ""
+
+#         return response.text.strip()
+
+#     except Exception as e:
+
+#         print("\nERROR generating answer:")
+#         print(e)
+
+#         return ""
+
+
+# # ============================================================
+# # EVALUATE ANSWER USING LOCAL LLAMA
+# # ============================================================
+
+# def evaluate_with_llama(
+#     question,
+#     expected_answer,
+#     context,
+#     answer
+# ):
+
+#     prompt = f"""
+# You are a strict evaluator for a scientific Photonics RAG system.
+
+# You must evaluate BOTH:
+# 1. The quality of the retrieved context.
+# 2. The quality of the generated answer.
+
+# Use the expected answer as the reference for what important
+# information the answer should contain.
+
+# Do not use outside knowledge.
+
+# ============================================================
+# QUESTION
+# ============================================================
+
+# {question}
+
+# ============================================================
+# EXPECTED ANSWER
+# ============================================================
+
+# {expected_answer}
+
+# ============================================================
+# RETRIEVED CONTEXT
+# ============================================================
+
+# {context}
+
+# ============================================================
+# GENERATED ANSWER
+# ============================================================
+
+# {answer}
+
+# ============================================================
+# EVALUATION CRITERIA
+# ============================================================
+
+# 1. RETRIEVAL_QUALITY:
+
+# Evaluate whether the retrieved context contains information
+# that is relevant and sufficient for answering the question.
+
+# Score:
+# 5 = Highly relevant and sufficient context.
+# 4 = Mostly relevant and sufficient, with minor missing information.
+# 3 = Partially relevant but important information is missing.
+# 2 = Mostly irrelevant or insufficient context.
+# 1 = Context does not meaningfully support the question.
+
+# 2. FAITHFULNESS:
+
+# Does the generated answer contain claims supported by the
+# retrieved context?
+
+# Score:
+# 5 = Fully supported by the retrieved context.
+# 4 = Mostly supported, with very minor unsupported wording.
+# 3 = Partially supported, with some unsupported claims.
+# 2 = Several unsupported claims.
+# 1 = Mostly unsupported or contradicts the context.
+
+# 3. RELEVANCE:
+
+# Does the generated answer directly answer the question?
+
+# Score:
+# 5 = Direct, focused, and clearly answers the question.
+# 4 = Mostly direct with minor unnecessary information.
+# 3 = Partially answers the question.
+# 2 = Mostly off-topic.
+# 1 = Does not answer the question.
+
+# 4. COMPLETENESS:
+
+# Compare the generated answer with the expected answer.
+
+# Score:
+# 5 = Covers essentially all important points from the expected answer.
+# 4 = Covers most important points, with minor omissions.
+# 3 = Covers some important points but misses significant information.
+# 2 = Covers very little of the expected answer.
+# 1 = Does not provide the expected information.
+
+# IMPORTANT:
+# Do NOT give a high completeness score simply because the
+# generated answer is supported by the retrieved context.
+
+# If the retrieved context itself is incomplete for the question,
+# Retrieval Quality should be reduced.
+
+# If the generated answer misses important information from the
+# Expected Answer, Completeness should be reduced.
+
+# 5. OVERALL:
+
+# Give an overall score considering retrieval quality and answer
+# quality.
+
+# Use your judgment based on the four previous criteria.
+
+# ============================================================
+# OUTPUT FORMAT
+# ============================================================
+
+# Return ONLY ONE LINE in EXACTLY this format:
+
+# RETRIEVAL_QUALITY=5 FAITHFULNESS=5 RELEVANCE=5 COMPLETENESS=5 OVERALL=5
+
+# Rules:
+
+# - Replace the numbers with your actual scores.
+# - All scores must be integers from 1 to 5.
+# - Do not add explanations.
+# - Do not use JSON.
+# - Do not use markdown.
+# - Do not add any other text.
+# """
+
+#     try:
+
+#         result = subprocess.run(
+#             [
+#                 OLLAMA_EXE,
+#                 "run",
+#                 OLLAMA_MODEL,
+#                 prompt
+#             ],
+#             capture_output=True,
+#             text=True,
+#             encoding="utf-8",
+#             errors="replace",
+#             timeout=180
+#         )
+
+#         raw_output = result.stdout.strip()
+
+#         print("\nLlama evaluation output:")
+#         print(raw_output)
+
+#         # ----------------------------------------------------
+#         # Extract scores
+#         # ----------------------------------------------------
+
+#         retrieval_match = re.search(
+#             r"RETRIEVAL_QUALITY\s*=\s*([1-5])",
+#             raw_output,
+#             re.IGNORECASE
+#         )
+
+#         faithfulness_match = re.search(
+#             r"FAITHFULNESS\s*=\s*([1-5])",
+#             raw_output,
+#             re.IGNORECASE
+#         )
+
+#         relevance_match = re.search(
+#             r"RELEVANCE\s*=\s*([1-5])",
+#             raw_output,
+#             re.IGNORECASE
+#         )
+
+#         completeness_match = re.search(
+#             r"COMPLETENESS\s*=\s*([1-5])",
+#             raw_output,
+#             re.IGNORECASE
+#         )
+
+#         overall_match = re.search(
+#             r"OVERALL\s*=\s*([1-5])",
+#             raw_output,
+#             re.IGNORECASE
+#         )
+
+#         retrieval_quality = (
+#             retrieval_match.group(1)
+#             if retrieval_match
+#             else ""
+#         )
+
+#         faithfulness = (
+#             faithfulness_match.group(1)
+#             if faithfulness_match
+#             else ""
+#         )
+
+#         relevance = (
+#             relevance_match.group(1)
+#             if relevance_match
+#             else ""
+#         )
+
+#         completeness = (
+#             completeness_match.group(1)
+#             if completeness_match
+#             else ""
+#         )
+
+#         overall = (
+#             overall_match.group(1)
+#             if overall_match
+#             else ""
+#         )
+
+#         # ----------------------------------------------------
+#         # Validate extraction
+#         # ----------------------------------------------------
+
+#         if not all([
+#             retrieval_quality,
+#             faithfulness,
+#             relevance,
+#             completeness,
+#             overall
+#         ]):
+
+#             return {
+#                 "retrieval_quality": "",
+#                 "faithfulness": "",
+#                 "relevance": "",
+#                 "completeness": "",
+#                 "overall": "",
+#                 "reason":
+#                     f"Could not parse Llama output: {raw_output}"
+#             }
+
+#         return {
+#             "retrieval_quality": retrieval_quality,
+#             "faithfulness": faithfulness,
+#             "relevance": relevance,
+#             "completeness": completeness,
+#             "overall": overall,
+#             "reason": "Evaluated by Llama 3.2:1B."
+#         }
+
+#     except subprocess.TimeoutExpired:
+
+#         return {
+#             "retrieval_quality": "",
+#             "faithfulness": "",
+#             "relevance": "",
+#             "completeness": "",
+#             "overall": "",
+#             "reason":
+#                 "Llama evaluation timed out."
+#         }
+
+#     except Exception as e:
+
+#         return {
+#             "retrieval_quality": "",
+#             "faithfulness": "",
+#             "relevance": "",
+#             "completeness": "",
+#             "overall": "",
+#             "reason":
+#                 f"Llama evaluation error: {e}"
+#         }
+
+
+# # ============================================================
+# # MAIN
+# # ============================================================
+
+# def main():
+
+#     print("=" * 80)
+#     print("PHOTONICS RAG - ANSWER QUALITY EVALUATION")
+#     print("=" * 80)
+
+#     # --------------------------------------------------------
+#     # LOAD QUESTIONS
+#     # --------------------------------------------------------
+
+#     questions_df = pd.read_csv(
+#         QUESTIONS_FILE
+#     )
+
+#     # --------------------------------------------------------
+#     # CHECK REQUIRED COLUMNS
+#     # --------------------------------------------------------
+
+#     required_columns = [
+#         "question",
+#         "expected_answer"
+#     ]
+
+#     missing_columns = [
+#         column
+#         for column in required_columns
+#         if column not in questions_df.columns
+#     ]
+
+#     if missing_columns:
+
+#         raise ValueError(
+#             "Missing required column(s) in evaluation CSV: "
+#             + ", ".join(missing_columns)
+#         )
+
+#     print(
+#         f"\nLoaded {len(questions_df)} "
+#         f"evaluation questions."
+#     )
+
+#     # --------------------------------------------------------
+#     # RESULTS
+#     # --------------------------------------------------------
+
+#     results = []
+
+#     processed = 0
+#     answers_generated = 0
+
+#     # --------------------------------------------------------
+#     # PROCESS QUESTIONS
+#     # --------------------------------------------------------
+
+#     for index, row in questions_df.iterrows():
+
+#         question = str(
+#             row["question"]
+#         ).strip()
+
+#         expected_answer = str(
+#             row["expected_answer"]
+#         ).strip()
+
+#         processed += 1
+
+#         print("\n")
+#         print("=" * 80)
+#         print(
+#             f"QUESTION {index + 1}/{len(questions_df)}"
+#         )
+#         print("=" * 80)
+
+#         print(
+#             f"\nQuestion: {question}"
+#         )
+
+#         print(
+#             f"\nExpected answer:\n{expected_answer}"
+#         )
+
+#         # ----------------------------------------------------
+#         # RETRIEVAL
+#         # ----------------------------------------------------
+
+#         print(
+#             "\nRunning hybrid retrieval..."
+#         )
+
+#         try:
+
+#             retrieved_results = hybrid_search(
+#                 question,
+#                 top_k=TOP_K
+#             )
+
+#         except TypeError:
+
+#             try:
+
+#                 retrieved_results = hybrid_search(
+#                     question,
+#                     TOP_K
+#                 )
+
+#             except Exception as e:
+
+#                 print(
+#                     f"\nRetrieval error: {e}"
+#                 )
+
+#                 retrieved_results = []
+
+#         except Exception as e:
+
+#             print(
+#                 f"\nRetrieval error: {e}"
+#             )
+
+#             retrieved_results = []
+
+#         # ----------------------------------------------------
+#         # DISPLAY RETRIEVAL COUNT
+#         # ----------------------------------------------------
+
+#         print(
+#             f"\nRetrieved {len(retrieved_results)} "
+#             f"results."
+#         )
+
+#         # ----------------------------------------------------
+#         # BUILD CONTEXT
+#         # ----------------------------------------------------
+
+#         context = build_context(
+#             retrieved_results
+#         )
+
+#         # ----------------------------------------------------
+#         # GENERATE ANSWER
+#         # ----------------------------------------------------
+
+#         print(
+#             "\nGenerating answer using Gemini..."
+#         )
+
+#         answer = generate_answer(
+#             question,
+#             context
+#         )
+
+#         if answer:
+
+#             answers_generated += 1
+
+#         print(
+#             f"\nGenerated answer:\n{answer}"
+#         )
+
+#         # ----------------------------------------------------
+#         # EVALUATE USING LLAMA
+#         # ----------------------------------------------------
+
+#         if answer:
+
+#             print(
+#                 "\nEvaluating retrieval and answer using "
+#                 "Llama 3.2:1B..."
+#             )
+
+#             evaluation = evaluate_with_llama(
+#                 question,
+#                 expected_answer,
+#                 context,
+#                 answer
+#             )
+
+#         else:
+
+#             evaluation = {
+#                 "retrieval_quality": "",
+#                 "faithfulness": "",
+#                 "relevance": "",
+#                 "completeness": "",
+#                 "overall": "",
+#                 "reason":
+#                     "Answer generation failed."
+#             }
+
+#         # ----------------------------------------------------
+#         # DISPLAY EVALUATION
+#         # ----------------------------------------------------
+
+#         print("\nEVALUATION:")
+
+#         print(
+#             f"Retrieval Quality : "
+#             f"{evaluation['retrieval_quality']}"
+#         )
+
+#         print(
+#             f"Relevance         : "
+#             f"{evaluation['relevance']}"
+#         )
+
+#         print(
+#             f"Completeness      : "
+#             f"{evaluation['completeness']}"
+#         )
+
+#         print(
+#             f"Faithfulness      : "
+#             f"{evaluation['faithfulness']}"
+#         )
+
+#         print(
+#             f"Overall           : "
+#             f"{evaluation['overall']}"
+#         )
+
+#         print(
+#             f"Reason            : "
+#             f"{evaluation['reason']}"
+#         )
+
+#         # ----------------------------------------------------
+#         # SAVE RESULT
+#         # ----------------------------------------------------
+
+#         results.append(
+#             {
+#                 "question":
+#                     question,
+
+#                 "expected_answer":
+#                     expected_answer,
+
+#                 "answer":
+#                     answer,
+
+#                 "retrieval_quality":
+#                     evaluation["retrieval_quality"],
+
+#                 "faithfulness":
+#                     evaluation["faithfulness"],
+
+#                 "relevance":
+#                     evaluation["relevance"],
+
+#                 "completeness":
+#                     evaluation["completeness"],
+
+#                 "overall_score":
+#                     evaluation["overall"],
+
+#                 "reason":
+#                     evaluation["reason"]
+#             }
+#         )
+
+#         # Small delay
+#         time.sleep(1)
+
+#     # ========================================================
+#     # SAVE CSV
+#     # ========================================================
+
+#     results_df = pd.DataFrame(
+#         results
+#     )
+
+#     results_df.to_csv(
+#         RESULTS_FILE,
+#         index=False
+#     )
+
+#     # ========================================================
+#     # CALCULATE AVERAGES
+#     # ========================================================
+
+#     retrieval_scores = pd.to_numeric(
+#         results_df["retrieval_quality"],
+#         errors="coerce"
+#     )
+
+#     faithfulness_scores = pd.to_numeric(
+#         results_df["faithfulness"],
+#         errors="coerce"
+#     )
+
+#     relevance_scores = pd.to_numeric(
+#         results_df["relevance"],
+#         errors="coerce"
+#     )
+
+#     completeness_scores = pd.to_numeric(
+#         results_df["completeness"],
+#         errors="coerce"
+#     )
+
+#     overall_scores = pd.to_numeric(
+#         results_df["overall_score"],
+#         errors="coerce"
+#     )
+
+#     def calculate_average(series):
+
+#         valid = series.dropna()
+
+#         if len(valid) == 0:
+#             return "N/A"
+
+#         return f"{valid.mean():.2f}/5"
+
+#     retrieval_average = calculate_average(
+#         retrieval_scores
+#     )
+
+#     faithfulness_average = calculate_average(
+#         faithfulness_scores
+#     )
+
+#     relevance_average = calculate_average(
+#         relevance_scores
+#     )
+
+#     completeness_average = calculate_average(
+#         completeness_scores
+#     )
+
+#     overall_average = calculate_average(
+#         overall_scores
+#     )
+
+#     # ========================================================
+#     # FINAL SUMMARY
+#     # ========================================================
+
+#     print("\n")
+#     print("=" * 80)
+#     print(
+#         "ANSWER QUALITY EVALUATION COMPLETE"
+#     )
+#     print("=" * 80)
+
+#     print(
+#         f"Total questions        : "
+#         f"{len(questions_df)}"
+#     )
+
+#     print(
+#         f"Processed              : "
+#         f"{processed}"
+#     )
+
+#     print(
+#         f"Answers generated      : "
+#         f"{answers_generated}"
+#     )
+
+#     print("\nAVERAGE SCORES")
+
+#     print(
+#         f"Retrieval Quality      : "
+#         f"{retrieval_average}"
+#     )
+
+#     print(
+#         f"Faithfulness           : "
+#         f"{faithfulness_average}"
+#     )
+
+#     print(
+#         f"Relevance              : "
+#         f"{relevance_average}"
+#     )
+
+#     print(
+#         f"Completeness           : "
+#         f"{completeness_average}"
+#     )
+
+#     print(
+#         f"Overall                : "
+#         f"{overall_average}"
+#     )
+
+#     print("\nResults saved to:")
+
+#     print(
+#         RESULTS_FILE
+#     )
+
+#     print("=" * 80)
+
+
+# # ============================================================
+# # ENTRY POINT
+# # ============================================================
+
+# if __name__ == "__main__":
+#     main()
+
 import os
 import re
-import time
-import subprocess
 import pandas as pd
-import google.generativeai as genai
-from dotenv import load_dotenv
-
-load_dotenv()
-
-
-# ============================================================
-# PROJECT ROOT
-# ============================================================
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-
-# ============================================================
-# IMPORT HYBRID RETRIEVER
-# ============================================================
-
 from app.retrieval.hybrid_retriever import hybrid_search
+from app.llm.gemini_service import generate_answer
 
 
-# ============================================================
-# FILE PATHS
-# ============================================================
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
 
-QUESTIONS_FILE = (
-    PROJECT_ROOT
-    / "evaluation"
-    / "rag_evaluation_questions.csv"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+INPUT_FILE = os.path.join(
+    BASE_DIR,
+    "evaluation",
+    "rag_evaluation_questions.csv"
 )
 
-RESULTS_FILE = (
-    PROJECT_ROOT
-    / "evaluation"
-    / "answer_quality_results.csv"
+OUTPUT_FILE = os.path.join(
+    BASE_DIR,
+    "evaluation",
+    "answer_quality_results.csv"
 )
-
-
-# ============================================================
-# GEMINI CONFIGURATION
-# ============================================================
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not GEMINI_API_KEY:
-    raise RuntimeError(
-        "GEMINI_API_KEY is not set.\n"
-        "Set it in PowerShell before running this script."
-    )
-
-
-genai.configure(api_key=GEMINI_API_KEY)
-
-MODEL_NAME = "gemini-3.6-flash"
-
-model = genai.GenerativeModel(MODEL_NAME)
-
-
-# ============================================================
-# SETTINGS
-# ============================================================
 
 TOP_K = 5
 
-OLLAMA_EXE = (
-    r"C:\Users\megha\AppData\Local\Programs\Ollama\ollama.exe"
-)
 
-OLLAMA_MODEL = "llama3.2:1b"
+# =============================================================================
+# TEXT CLEANING
+# =============================================================================
 
+def clean_text(text):
+    """
+    Clean text before sending it to the evaluator.
+    """
 
-# ============================================================
-# SAFE TEXT EXTRACTION
-# ============================================================
-
-def get_text(item):
-
-    if not isinstance(item, dict):
+    if text is None:
         return ""
 
-    return str(
-        item.get("text")
-        or item.get("document")
-        or item.get("chunk")
-        or ""
+    text = str(text)
+
+    # Remove excessive whitespace
+    text = re.sub(r"\s+", " ", text)
+
+    return text.strip()
+
+
+# =============================================================================
+# BUILD EVALUATION PROMPT
+# =============================================================================
+
+def build_evaluation_prompt(
+    question,
+    expected_answer,
+    generated_answer,
+    retrieved_context
+):
+    """
+    Create a structured prompt for Llama/Gemma evaluation.
+
+    The evaluator judges the generated answer using BOTH:
+    1. Expected answer
+    2. Retrieved context
+
+    This prevents correct answers from being unfairly penalized
+    when they contain additional information supported by the documents.
+    """
+
+    prompt = f"""
+You are evaluating a RAG system for a Photonics knowledge base.
+
+Evaluate the GENERATED ANSWER using the EXPECTED ANSWER and RETRIEVED
+CONTEXT.
+
+IMPORTANT RULES:
+
+1. Do NOT require the generated answer to use exactly the same wording
+   as the expected answer.
+
+2. Additional information is acceptable if it is supported by the
+   retrieved context.
+
+3. Do NOT penalize an answer simply because it contains more information
+   than the expected answer.
+
+4. Judge whether the generated answer actually answers the QUESTION.
+
+5. FAITHFULNESS:
+   Give a high score when the answer is supported by the retrieved
+   context and does not introduce unsupported claims.
+
+6. RELEVANCE:
+   Give a high score when the answer directly addresses the question.
+   Do not penalize useful supporting information.
+
+7. COMPLETENESS:
+   Compare the answer with the expected answer and retrieved context.
+   If the important concepts required by the question are present,
+   give a high score.
+
+8. RETRIEVAL QUALITY:
+   Judge whether the retrieved context contains information useful
+   for answering the question.
+
+SCORING:
+
+5 = Excellent
+4 = Good
+3 = Acceptable
+2 = Poor
+1 = Very poor
+
+QUESTION:
+{question}
+
+EXPECTED ANSWER:
+{expected_answer}
+
+GENERATED ANSWER:
+{generated_answer}
+
+RETRIEVED CONTEXT:
+{retrieved_context}
+
+Return ONLY the following format:
+
+RETRIEVAL_QUALITY=<1-5>
+FAITHFULNESS=<1-5>
+RELEVANCE=<1-5>
+COMPLETENESS=<1-5>
+OVERALL=<1-5>
+REASON=<short explanation>
+"""
+
+    return prompt
+
+
+# =============================================================================
+# PARSE EVALUATION
+# =============================================================================
+
+def parse_evaluation(response):
+    """
+    Extract scores from the evaluator response.
+    """
+
+    if response is None:
+        return {
+            "retrieval_quality": 0,
+            "faithfulness": 0,
+            "relevance": 0,
+            "completeness": 0,
+            "overall_score": 0,
+            "reason": "No evaluation response."
+        }
+
+    response = str(response)
+
+    def extract_score(pattern):
+        match = re.search(pattern, response, re.IGNORECASE)
+
+        if match:
+            try:
+                score = int(match.group(1))
+
+                if 1 <= score <= 5:
+                    return score
+
+            except ValueError:
+                pass
+
+        return 0
+
+    retrieval_quality = extract_score(
+        r"RETRIEVAL[_ ]QUALITY\s*=\s*(\d+)"
     )
 
-
-def get_document(item):
-
-    if not isinstance(item, dict):
-        return ""
-
-    return str(
-        item.get("document_name")
-        or item.get("source")
-        or ""
+    faithfulness = extract_score(
+        r"FAITHFULNESS\s*=\s*(\d+)"
     )
 
-
-def get_page(item):
-
-    if not isinstance(item, dict):
-        return ""
-
-    value = (
-        item.get("page_number")
-        or item.get("page")
-        or ""
+    relevance = extract_score(
+        r"RELEVANCE\s*=\s*(\d+)"
     )
 
-    return str(value)
+    completeness = extract_score(
+        r"COMPLETENESS\s*=\s*(\d+)"
+    )
+
+    overall = extract_score(
+        r"OVERALL\s*=\s*(\d+)"
+    )
+
+    reason_match = re.search(
+        r"REASON\s*=\s*(.*)",
+        response,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if reason_match:
+        reason = reason_match.group(1).strip()
+    else:
+        reason = "No reason provided."
+
+    return {
+        "retrieval_quality": retrieval_quality,
+        "faithfulness": faithfulness,
+        "relevance": relevance,
+        "completeness": completeness,
+        "overall_score": overall,
+        "reason": reason
+    }
 
 
-# ============================================================
-# BUILD CONTEXT
-# ============================================================
+# =============================================================================
+# FORMAT RETRIEVED DOCUMENTS
+# =============================================================================
 
-def build_context(results):
+def format_retrieved_context(results):
+    """
+    Convert retrieved chunks into readable context for the evaluator.
+    """
+
+    if not results:
+        return "No relevant context was retrieved."
 
     context_parts = []
 
-    for rank, item in enumerate(
-        results[:TOP_K],
-        start=1
-    ):
+    for index, doc in enumerate(results, start=1):
 
-        text = get_text(item)
-        document = get_document(item)
-        page = get_page(item)
+        document_name = doc.get(
+            "document_name",
+            doc.get("document", "Unknown document")
+        )
+
+        page_number = doc.get(
+            "page_number",
+            doc.get("page", "Unknown")
+        )
+
+        text = doc.get("text", "")
+
+        text = clean_text(text)
 
         if not text:
             continue
 
         context_parts.append(
             f"""
-SOURCE {rank}
-
-Document: {document}
-Page: {page}
+Context {index}
+Document: {document_name}
+Page: {page_number}
 
 {text}
 """
         )
 
+    if not context_parts:
+        return "No usable text was retrieved."
+
     return "\n".join(context_parts)
 
 
-# ============================================================
-# GENERATE ANSWER USING GEMINI
-# ============================================================
+# =============================================================================
+# GENERATE PHOTONICS ANSWER
+# =============================================================================
 
-def generate_answer(question, context):
+def generate_photonics_answer(question, retrieved_results):
+    """
+    Generate an answer using the retrieved context.
+    """
+
+    context = format_retrieved_context(retrieved_results)
 
     prompt = f"""
-You are a scientific assistant specialized in photonics.
+You are a Photonics question-answering assistant.
 
-Answer the user's question using ONLY the supplied context.
+Answer the question using ONLY the information available in the
+provided context.
 
-Do not use outside knowledge.
+If the context contains enough information, give a clear and concise
+answer.
 
-If the context does not contain enough information to answer
-the question, say:
-
-"I don't know based on the provided documents."
-
-Keep the answer concise and scientifically accurate.
+Do not unnecessarily introduce unrelated information.
 
 Question:
 {question}
 
 Context:
 {context}
-
-Answer:
 """
 
     try:
+        answer = generate_answer(prompt)
 
-        response = model.generate_content(prompt)
-
-        if not response or not response.text:
+        if answer is None:
             return ""
 
-        return response.text.strip()
+        return clean_text(answer)
 
     except Exception as e:
-
-        print("\nERROR generating answer:")
-        print(e)
-
+        print(f"Answer generation error: {e}")
         return ""
 
 
-# ============================================================
-# EVALUATE ANSWER USING LOCAL LLAMA
-# ============================================================
+# =============================================================================
+# EVALUATE ONE QUESTION
+# =============================================================================
 
-def evaluate_with_llama(
-    question,
-    context,
-    answer
-):
+def evaluate_question(question, expected_answer):
+    """
+    Retrieve documents, generate an answer, and evaluate answer quality.
+    """
 
-    prompt = f"""
-You are an evaluator for a scientific Photonics RAG system.
+    print("\n" + "=" * 80)
+    print(f"QUESTION: {question}")
+    print("=" * 80)
 
-Evaluate the generated answer using ONLY the supplied context.
+    # -------------------------------------------------------------------------
+    # STEP 1: HYBRID RETRIEVAL
+    # -------------------------------------------------------------------------
 
-Question:
-{question}
+    print("\nRunning Hybrid Search...")
 
-Retrieved Context:
-{context}
+    try:
+        retrieved_results = hybrid_search(
+            question
+        )
 
-Generated Answer:
-{answer}
+    except Exception as e:
+        print(f"Retrieval error: {e}")
+        retrieved_results = []
 
-Evaluate these four criteria:
+    # Limit results
+    if retrieved_results:
+        retrieved_results = retrieved_results[:TOP_K]
 
-1. FAITHFULNESS:
-Is the answer supported by the retrieved context?
+    # -------------------------------------------------------------------------
+    # STEP 2: DISPLAY RETRIEVED DOCUMENTS
+    # -------------------------------------------------------------------------
 
-2. RELEVANCE:
-Does the answer directly answer the question?
+    print("\nRETRIEVED CONTEXT")
+    print("-" * 80)
 
-3. COMPLETENESS:
-Does the answer include the important information available
-in the retrieved context?
+    if not retrieved_results:
+        print("No documents retrieved.")
 
-4. OVERALL:
-Give an overall quality score.
+    else:
+        for rank, doc in enumerate(retrieved_results, start=1):
 
-Give every score from 1 to 5.
+            document_name = doc.get(
+                "document_name",
+                doc.get("document", "Unknown")
+            )
 
-Return ONLY ONE LINE in EXACTLY this format:
+            page_number = doc.get(
+                "page_number",
+                doc.get("page", "Unknown")
+            )
 
-FAITHFULNESS=5 RELEVANCE=5 COMPLETENESS=5 OVERALL=5
+            distance = doc.get(
+                "distance",
+                "N/A"
+            )
 
-Rules:
+            print(f"\nRank : {rank}")
+            print(f"Document : {document_name}")
+            print(f"Page : {page_number}")
+            print(f"Distance : {distance}")
 
-- Replace the numbers with your actual scores.
-- All scores must be integers from 1 to 5.
-- Do not add explanations.
-- Do not use JSON.
-- Do not use markdown.
-- Do not add any other text.
-"""
+    # -------------------------------------------------------------------------
+    # STEP 3: GENERATE ANSWER
+    # -------------------------------------------------------------------------
+
+    print("\nGenerating answer...")
+
+    generated_answer = generate_photonics_answer(
+        question,
+        retrieved_results
+    )
+
+    print("\nGENERATED ANSWER")
+    print("-" * 80)
+    print(generated_answer)
+
+    # -------------------------------------------------------------------------
+    # STEP 4: PREPARE EVALUATION CONTEXT
+    # -------------------------------------------------------------------------
+
+    retrieved_context = format_retrieved_context(
+        retrieved_results
+    )
+
+    evaluation_prompt = build_evaluation_prompt(
+        question=question,
+        expected_answer=expected_answer,
+        generated_answer=generated_answer,
+        retrieved_context=retrieved_context
+    )
+
+    # -------------------------------------------------------------------------
+    # STEP 5: RUN LLM EVALUATION
+    # -------------------------------------------------------------------------
+
+    print("\nRunning answer quality evaluation...")
 
     try:
 
-        result = subprocess.run(
-            [
-                OLLAMA_EXE,
-                "run",
-                OLLAMA_MODEL,
-                prompt
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=180
+        evaluation_response = generate_answer(
+            evaluation_prompt
         )
-
-        raw_output = result.stdout.strip()
-
-        print("\nLlama evaluation output:")
-        print(raw_output)
-
-        # ----------------------------------------------------
-        # Extract four scores
-        # ----------------------------------------------------
-
-        faithfulness_match = re.search(
-            r"FAITHFULNESS\s*=\s*([1-5])",
-            raw_output,
-            re.IGNORECASE
-        )
-
-        relevance_match = re.search(
-            r"RELEVANCE\s*=\s*([1-5])",
-            raw_output,
-            re.IGNORECASE
-        )
-
-        completeness_match = re.search(
-            r"COMPLETENESS\s*=\s*([1-5])",
-            raw_output,
-            re.IGNORECASE
-        )
-
-        overall_match = re.search(
-            r"OVERALL\s*=\s*([1-5])",
-            raw_output,
-            re.IGNORECASE
-        )
-
-        faithfulness = (
-            faithfulness_match.group(1)
-            if faithfulness_match
-            else ""
-        )
-
-        relevance = (
-            relevance_match.group(1)
-            if relevance_match
-            else ""
-        )
-
-        completeness = (
-            completeness_match.group(1)
-            if completeness_match
-            else ""
-        )
-
-        overall = (
-            overall_match.group(1)
-            if overall_match
-            else ""
-        )
-
-        # ----------------------------------------------------
-        # Validate extraction
-        # ----------------------------------------------------
-
-        if not all([
-            faithfulness,
-            relevance,
-            completeness,
-            overall
-        ]):
-
-            return {
-                "faithfulness": "",
-                "relevance": "",
-                "completeness": "",
-                "overall": "",
-                "reason":
-                    f"Could not parse Llama output: {raw_output}"
-            }
-
-        return {
-            "faithfulness": faithfulness,
-            "relevance": relevance,
-            "completeness": completeness,
-            "overall": overall,
-            "reason": "Evaluated by Llama 3.2:1B."
-        }
-
-    except subprocess.TimeoutExpired:
-
-        return {
-            "faithfulness": "",
-            "relevance": "",
-            "completeness": "",
-            "overall": "",
-            "reason":
-                "Llama evaluation timed out."
-        }
 
     except Exception as e:
 
-        return {
-            "faithfulness": "",
-            "relevance": "",
-            "completeness": "",
-            "overall": "",
-            "reason":
-                f"Llama evaluation error: {e}"
-        }
+        print(f"Evaluation error: {e}")
 
+        evaluation_response = ""
 
-# ============================================================
-# MAIN
-# ============================================================
+    # -------------------------------------------------------------------------
+    # STEP 6: PARSE SCORES
+    # -------------------------------------------------------------------------
 
-def main():
+    evaluation = parse_evaluation(
+        evaluation_response
+    )
 
-    print("=" * 80)
-    print("PHOTONICS RAG - ANSWER QUALITY EVALUATION")
+    print("\n" + "=" * 80)
+    print("ANSWER QUALITY EVALUATION")
     print("=" * 80)
 
-    # --------------------------------------------------------
-    # LOAD QUESTIONS
-    # --------------------------------------------------------
-
-    questions_df = pd.read_csv(
-        QUESTIONS_FILE
+    print(
+        f"Retrieval Quality : "
+        f"{evaluation['retrieval_quality']}"
     )
 
     print(
-        f"\nLoaded {len(questions_df)} "
-        f"evaluation questions."
+        f"Faithfulness      : "
+        f"{evaluation['faithfulness']}"
     )
 
-    # --------------------------------------------------------
-    # RESULTS
-    # --------------------------------------------------------
+    print(
+        f"Relevance         : "
+        f"{evaluation['relevance']}"
+    )
+
+    print(
+        f"Completeness      : "
+        f"{evaluation['completeness']}"
+    )
+
+    print(
+        f"Overall           : "
+        f"{evaluation['overall_score']}"
+    )
+
+    print(
+        f"Reason            : "
+        f"{evaluation['reason']}"
+    )
+
+    # -------------------------------------------------------------------------
+    # STEP 7: RETURN RESULT
+    # -------------------------------------------------------------------------
+
+    return {
+        "question": question,
+        "expected_answer": expected_answer,
+        "answer": generated_answer,
+        "retrieval_quality": evaluation["retrieval_quality"],
+        "faithfulness": evaluation["faithfulness"],
+        "relevance": evaluation["relevance"],
+        "completeness": evaluation["completeness"],
+        "overall_score": evaluation["overall_score"],
+        "reason": evaluation["reason"]
+    }
+
+
+# =============================================================================
+# MAIN EVALUATION
+# =============================================================================
+
+def main():
+
+    print("\n" + "=" * 80)
+    print("PHOTONICSRAG ANSWER QUALITY EVALUATION")
+    print("=" * 80)
+
+    # -------------------------------------------------------------------------
+    # CHECK INPUT FILE
+    # -------------------------------------------------------------------------
+
+    if not os.path.exists(INPUT_FILE):
+
+        print(
+            f"\nERROR: Evaluation file not found:\n"
+            f"{INPUT_FILE}"
+        )
+
+        return
+
+    # -------------------------------------------------------------------------
+    # LOAD QUESTIONS
+    # -------------------------------------------------------------------------
+
+    print(
+        f"\nLoading evaluation questions from:\n"
+        f"{INPUT_FILE}"
+    )
+
+    df = pd.read_csv(
+        INPUT_FILE
+    )
+
+    required_columns = [
+        "question",
+        "expected_answer"
+    ]
+
+    for column in required_columns:
+
+        if column not in df.columns:
+
+            print(
+                f"\nERROR: Missing required column: "
+                f"{column}"
+            )
+
+            return
+
+    print(
+        f"Total questions: {len(df)}"
+    )
+
+    # -------------------------------------------------------------------------
+    # EVALUATE QUESTIONS
+    # -------------------------------------------------------------------------
 
     results = []
 
-    processed = 0
-    answers_generated = 0
+    for index, row in df.iterrows():
 
-    # --------------------------------------------------------
-    # PROCESS QUESTIONS
-    # --------------------------------------------------------
-
-    for index, row in questions_df.iterrows():
-
-        question = str(
+        question = clean_text(
             row["question"]
-        ).strip()
-
-        processed += 1
-
-        print("\n")
-        print("=" * 80)
-        print(
-            f"QUESTION {index + 1}/{len(questions_df)}"
-        )
-        print("=" * 80)
-
-        print(
-            f"\nQuestion: {question}"
         )
 
-        # ----------------------------------------------------
-        # RETRIEVAL
-        # ----------------------------------------------------
+        expected_answer = clean_text(
+            row["expected_answer"]
+        )
+
+        print(
+            f"\n\nProcessing question "
+            f"{index + 1}/{len(df)}"
+        )
 
         try:
 
-            retrieved_results = hybrid_search(
+            result = evaluate_question(
                 question,
-                top_k=TOP_K
+                expected_answer
             )
 
-        except TypeError:
-
-            try:
-
-                retrieved_results = hybrid_search(
-                    question,
-                    TOP_K
-                )
-
-            except Exception as e:
-
-                print(
-                    f"\nRetrieval error: {e}"
-                )
-
-                retrieved_results = []
+            results.append(result)
 
         except Exception as e:
 
             print(
-                f"\nRetrieval error: {e}"
+                f"\nERROR processing question "
+                f"{index + 1}: {e}"
             )
 
-            retrieved_results = []
-
-        # ----------------------------------------------------
-        # BUILD CONTEXT
-        # ----------------------------------------------------
-
-        context = build_context(
-            retrieved_results
-        )
-
-        # ----------------------------------------------------
-        # GENERATE ANSWER
-        # ----------------------------------------------------
-
-        print(
-            "\nGenerating answer using Gemini..."
-        )
-
-        answer = generate_answer(
-            question,
-            context
-        )
-
-        if answer:
-
-            answers_generated += 1
-
-        print(
-            f"\nAnswer:\n{answer}"
-        )
-
-        # ----------------------------------------------------
-        # EVALUATE USING LLAMA
-        # ----------------------------------------------------
-
-        if answer:
-
-            print(
-                "\nEvaluating answer using "
-                "Llama 3.2:1B..."
+            results.append(
+                {
+                    "question": question,
+                    "expected_answer": expected_answer,
+                    "answer": "",
+                    "retrieval_quality": 0,
+                    "faithfulness": 0,
+                    "relevance": 0,
+                    "completeness": 0,
+                    "overall_score": 0,
+                    "reason": f"Evaluation failed: {e}"
+                }
             )
 
-            evaluation = evaluate_with_llama(
-                question,
-                context,
-                answer
-            )
-
-        else:
-
-            evaluation = {
-                "faithfulness": "",
-                "relevance": "",
-                "completeness": "",
-                "overall": "",
-                "reason":
-                    "Answer generation failed."
-            }
-
-        # ----------------------------------------------------
-        # DISPLAY EVALUATION
-        # ----------------------------------------------------
-
-        print("\nANSWER QUALITY:")
-
-        print(
-            f"Relevance     : "
-            f"{evaluation['relevance']}"
-        )
-
-        print(
-            f"Completeness  : "
-            f"{evaluation['completeness']}"
-        )
-
-        print(
-            f"Faithfulness  : "
-            f"{evaluation['faithfulness']}"
-        )
-
-        print(
-            f"Overall       : "
-            f"{evaluation['overall']}"
-        )
-
-        print(
-            f"Reason        : "
-            f"{evaluation['reason']}"
-        )
-
-        # ----------------------------------------------------
-        # SAVE RESULT
-        # ----------------------------------------------------
-
-        results.append(
-            {
-                "question":
-                    question,
-
-                "answer":
-                    answer,
-
-                "faithfulness":
-                    evaluation["faithfulness"],
-
-                "relevance":
-                    evaluation["relevance"],
-
-                "completeness":
-                    evaluation["completeness"],
-
-                "overall_score":
-                    evaluation["overall"],
-
-                "reason":
-                    evaluation["reason"]
-            }
-        )
-
-        # Small delay to avoid excessive requests
-        time.sleep(1)
-
-    # ========================================================
-    # SAVE CSV
-    # ========================================================
+    # -------------------------------------------------------------------------
+    # SAVE RESULTS
+    # -------------------------------------------------------------------------
 
     results_df = pd.DataFrame(
         results
     )
 
+    os.makedirs(
+        os.path.dirname(OUTPUT_FILE),
+        exist_ok=True
+    )
+
     results_df.to_csv(
-        RESULTS_FILE,
+        OUTPUT_FILE,
         index=False
     )
 
-    # ========================================================
-    # CALCULATE AVERAGE SCORE
-    # ========================================================
+    # -------------------------------------------------------------------------
+    # CALCULATE AVERAGES
+    # -------------------------------------------------------------------------
 
-    numeric_scores = pd.to_numeric(
-        results_df["overall_score"],
-        errors="coerce"
-    )
+    valid_results = results_df[
+        results_df["overall_score"] > 0
+    ]
 
-    valid_scores = numeric_scores.dropna()
+    if len(valid_results) > 0:
 
-    if len(valid_scores) > 0:
+        avg_retrieval = valid_results[
+            "retrieval_quality"
+        ].mean()
 
-        average_score = (
-            valid_scores.mean()
-        )
+        avg_faithfulness = valid_results[
+            "faithfulness"
+        ].mean()
 
-        average_display = (
-            f"{average_score:.2f}/5"
-        )
+        avg_relevance = valid_results[
+            "relevance"
+        ].mean()
+
+        avg_completeness = valid_results[
+            "completeness"
+        ].mean()
+
+        avg_overall = valid_results[
+            "overall_score"
+        ].mean()
 
     else:
 
-        average_display = "N/A"
+        avg_retrieval = 0
+        avg_faithfulness = 0
+        avg_relevance = 0
+        avg_completeness = 0
+        avg_overall = 0
 
-    # ========================================================
-    # FINAL SUMMARY
-    # ========================================================
+    # -------------------------------------------------------------------------
+    # FINAL REPORT
+    # -------------------------------------------------------------------------
 
-    print("\n")
+    print("\n\n" + "=" * 80)
+    print("ANSWER QUALITY EVALUATION COMPLETE")
     print("=" * 80)
-    print(
-        "ANSWER QUALITY EVALUATION COMPLETE"
-    )
-    print("=" * 80)
 
     print(
-        f"Total questions       : "
-        f"{len(questions_df)}"
+        f"Total questions        : "
+        f"{len(df)}"
     )
 
     print(
-        f"Processed             : "
-        f"{processed}"
+        f"Processed              : "
+        f"{len(results)}"
     )
 
     print(
         f"Answers generated     : "
-        f"{answers_generated}"
+        f"{sum(bool(x['answer']) for x in results)}"
+    )
+
+    print("\nAVERAGE SCORES")
+
+    print(
+        f"Retrieval Quality      : "
+        f"{avg_retrieval:.2f}/5"
     )
 
     print(
-        f"Average answer score  : "
-        f"{average_display}"
+        f"Faithfulness           : "
+        f"{avg_faithfulness:.2f}/5"
+    )
+
+    print(
+        f"Relevance              : "
+        f"{avg_relevance:.2f}/5"
+    )
+
+    print(
+        f"Completeness           : "
+        f"{avg_completeness:.2f}/5"
+    )
+
+    print(
+        f"Overall                : "
+        f"{avg_overall:.2f}/5"
     )
 
     print("\nResults saved to:")
 
     print(
-        RESULTS_FILE
+        OUTPUT_FILE
     )
 
     print("=" * 80)
 
 
-# ============================================================
-# ENTRY POINT
-# ============================================================
+# =============================================================================
+# RUN
+# =============================================================================
 
 if __name__ == "__main__":
     main()

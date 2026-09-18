@@ -1,0 +1,21 @@
+question,expected_document,expected_page,semantic_rank,semantic_hit@1,semantic_hit@3,semantic_hit@5,bm25_rank,bm25_hit@1,bm25_hit@3,bm25_hit@5,rrf_rank,rrf_hit@1,rrf_hit@3,rrf_hit@5
+What is stimulated emission?,laser_physics.pdf,2,4.0,0,0,1,5.0,0,0,1,,0,0,0
+What is spontaneous emission?,laser_physics.pdf,2,2.0,0,1,1,,0,0,0,2.0,0,1,1
+What is population inversion?,Optical_Amplifiers.pdf,9,,0,0,0,1.0,1,1,1,1.0,1,1,1
+What is the principle of laser operation?,laser_physics.pdf,2,3.0,0,1,1,,0,0,0,5.0,0,0,1
+What are the properties of photons produced by stimulated emission?,laser_physics.pdf,2,,0,0,0,4.0,0,0,1,,0,0,0
+What is an optical oscillator?,laser_physics.pdf,5,1.0,1,1,1,1.0,1,1,1,1.0,1,1,1
+What is a three-level laser system?,laser_physics.pdf,3,,0,0,0,1.0,1,1,1,2.0,0,1,1
+Why is pumping required in a laser?,Optical_Amplifiers.pdf,9,,0,0,0,,0,0,0,,0,0,0
+What is amplified spontaneous emission?,physics_and _applications_of_random_lasers.pdf,2,1.0,1,1,1,1.0,1,1,1,1.0,1,1,1
+What is the role of an optical cavity in a laser?,physics_and _applications_of_random_lasers.pdf,2,,0,0,0,1.0,1,1,1,3.0,0,1,1
+What is total internal reflection?,optical_communication.pdf,2,,0,0,0,,0,0,0,,0,0,0
+What is critical angle?,optical_communication.pdf,2,2.0,0,1,1,3.0,0,1,1,4.0,0,0,1
+What is mode coupling?,optical_communication.pdf,2,1.0,1,1,1,1.0,1,1,1,1.0,1,1,1
+What is an index profile?,optical_communication.pdf,4,,0,0,0,5.0,0,0,1,5.0,0,0,1
+What are leaky modes in optical fibers?,optical_communication.pdf,4,3.0,0,1,1,1.0,1,1,1,1.0,1,1,1
+What is numerical aperture?,Fibre _Optics.pdf,19,,0,0,0,4.0,0,0,1,,0,0,0
+What is acceptance angle?,Fibre _Optics.pdf,19,,0,0,0,5.0,0,0,1,,0,0,0
+What are quantum dot lasers?,semiconductor_lasers.pdf,23,,0,0,0,,0,0,0,,0,0,0
+What is the role of population inversion in stimulated emission?,Optical_Amplifiers.pdf,9,1.0,1,1,1,1.0,1,1,1,3.0,0,1,1
+How does stimulated emission contribute to laser amplification?,laser_physics.pdf,2,,0,0,0,,0,0,0,,0,0,0

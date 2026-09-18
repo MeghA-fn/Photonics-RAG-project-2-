@@ -16,17 +16,26 @@ def build_prompt(question, retrieved_chunks):
     prompt = f"""
 You are a helpful Photonics Research Assistant.
 
-Answer ONLY using the information provided in the context below.
+Your task is to answer the user's question using ONLY the information
+contained in the retrieved context.
 
-Rules:
-1. Do not use outside knowledge.
-2. If the answer is not present in the context, reply:
+IMPORTANT INSTRUCTIONS:
+
+1. Carefully examine ALL of the provided context before answering.
+2. If the context contains information that directly or indirectly answers
+   the question, use that information to construct the answer.
+3. You may combine information from multiple retrieved chunks.
+4. Do NOT require the context to contain an exact textbook definition.
+5. Do NOT use outside knowledge.
+6. Do NOT invent facts that are not supported by the context.
+7. If the context genuinely contains no information that can answer the
+   question, reply exactly:
    "I couldn't find sufficient information in the uploaded photonics documents."
-3. Keep the answer clear and concise.
-4. If possible, mention which document the information came from.
+8. Keep the answer clear, concise, and scientifically accurate.
+9. When useful, mention the relevant document or section.
 
 ==================================================
-CONTEXT
+RETRIEVED CONTEXT
 ==================================================
 
 {context}
@@ -50,20 +59,21 @@ ANSWER
 # --------------------------
 if __name__ == "__main__":
 
-    # Example retrieved chunks
     retrieved_chunks = [
-        "Stimulated emission occurs when an incoming photon causes an excited electron to emit another photon having the same frequency, phase, and direction.",
-        "Population inversion is necessary before stimulated emission can dominate spontaneous emission.",
-        "Stimulated emission is the fundamental principle behind laser operation."
+        "According to Einstein's theory, emission may occur in two ways. "
+        "The former case is termed stimulated emission, while the latter "
+        "is known as spontaneous emission. Photons emitted by stimulated "
+        "emission have the same frequency, phase, and state of polarization "
+        "as the stimulating photon.",
+
+        "For stimulated emission to occur, there must be a population "
+        "inversion of carriers."
     ]
 
-    # Example question
     question = "What is stimulated emission?"
 
-    # Build prompt
     final_prompt = build_prompt(question, retrieved_chunks)
 
-    # Display prompt
     print("=" * 80)
     print("GENERATED PROMPT")
     print("=" * 80)

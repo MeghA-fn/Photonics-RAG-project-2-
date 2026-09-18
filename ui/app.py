@@ -15,7 +15,7 @@ st.set_page_config(
 # -----------------------------------------------------
 st.title("Photonics RAG Assistant")
 
-st.write("Ask any questions related to photonics")
+st.write("Ask questions related to photonics")
 
 # -----------------------------------------------------
 # 13.3 Sidebar

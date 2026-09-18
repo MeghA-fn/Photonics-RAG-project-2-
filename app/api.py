@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+# from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # from app.retrieval.retriever import retrieve_documents
 from app.retrieval.hybrid_retriever import hybrid_search
@@ -8,6 +10,7 @@ from app.llm.gemini_service import generate_answer
 
 app = FastAPI()
 
+Instrumentator().instrument(app).expose(app)
 
 class QuestionRequest(BaseModel):
     question: str
@@ -122,7 +125,19 @@ def ask_question(request: QuestionRequest):
     )
 
     # Step 4: Generate answer
-    answer = generate_answer(prompt)
+    try:
+        answer = generate_answer(prompt)
+
+    except RuntimeError as e:
+
+        if "quota" in str(e).lower():
+
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API quota exhausted. Please try again after the quota resets."
+            )
+
+        raise
 
     # Step 5: Build sources
     source_pages = {}
@@ -130,7 +145,7 @@ def ask_question(request: QuestionRequest):
     for doc in retrieved_docs:
 
         document = doc["document_name"]
-        page = doc["page_number"]
+        page = int(doc["page_number"])
 
         if document not in source_pages:
             source_pages[document] = []
@@ -149,8 +164,79 @@ def ask_question(request: QuestionRequest):
         )
 
     # Step 6: Confidence score
+    semantic_distances = [
+        doc.get("distance")
+        for doc in retrieved_docs
+        if doc.get("distance") is not None
+    ]
+
+    rrf_scores = [
+        doc.get("rrf_score")
+        for doc in retrieved_docs
+        if doc.get("rrf_score") is not None
+    ]
+
+    # --------------------------------------------------------
+    # Calculate semantic confidence
+    # --------------------------------------------------------
+
+    if semantic_distances:
+        best_distance = min(semantic_distances)
+
+        semantic_confidence = max(
+            0.0,
+            min(1.0, 1 - best_distance)
+        )
+    else:
+        semantic_confidence = 0.0
+
+
+    # --------------------------------------------------------
+    # Calculate hybrid confidence
+    # --------------------------------------------------------
+
+    if rrf_scores:
+        best_rrf = max(rrf_scores)
+
+        # Normalize RRF score approximately to 0-1
+        rrf_confidence = min(
+            1.0,
+            best_rrf * 60
+        )
+    else:
+        rrf_confidence = 0.0
+
+
+    # --------------------------------------------------------
+    # Check retrieval agreement
+    # --------------------------------------------------------
+
+    hybrid_sources = [
+        doc.get("source", "")
+        for doc in retrieved_docs
+    ]
+
+    has_both_sources = any(
+        "Semantic" in source and "BM25" in source
+        for source in hybrid_sources
+    )
+
+
+    # --------------------------------------------------------
+    # Final confidence
+    # --------------------------------------------------------
+
+    confidence = (
+        0.6 * semantic_confidence
+        + 0.4 * rrf_confidence
+    )
+
+    # Small bonus when Semantic + BM25 agree
+    if has_both_sources:
+        confidence += 0.05
+
     confidence = round(
-        1 - min(doc["distance"] for doc in retrieved_docs),
+        max(0.0, min(1.0, confidence)),
         3
     )
 
