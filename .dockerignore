@@ -1,0 +1,14 @@
+venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.env
+
+evaluation/
+data/raw/
+
+*.csv
+!data/processed/chunks.csv
+
+README.md

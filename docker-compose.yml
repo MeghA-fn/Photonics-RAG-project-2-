@@ -1,0 +1,25 @@
+services:
+
+  photonicsrag-api:
+    image: photonicsrag-api:cpu
+    container_name: photonicsrag-api
+    env_file:
+      - .env
+    ports:
+      - "8001:8000"
+    networks:
+      - photonicsrag-network
+
+  photonicsrag-ui:
+    image: photonicsrag-ui:latest
+    container_name: photonicsrag-ui
+    depends_on:
+      - photonicsrag-api
+    ports:
+      - "8501:8501"
+    networks:
+      - photonicsrag-network
+
+networks:
+  photonicsrag-network:
+    driver: bridge

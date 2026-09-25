@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 
@@ -44,8 +45,13 @@ if st.button("Ask"):
 
         with st.spinner("Searching documents and generating answer..."):
 
+            api_url = os.getenv(
+                "API_URL",
+                "http://127.0.0.1:8000"
+            )
+
             response = requests.post(
-                "http://127.0.0.1:8000/ask",
+                "http://photonicsrag-api:8000/ask",
                 json={
                     "question": question
                 }
