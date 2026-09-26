@@ -3,6 +3,10 @@ venv/
 __pycache__/
 *.pyc
 data/raw/
-data/processed/
-data/chroma_db/
+data/processed/*
+!data/processed/chunks.csv
+
+data/chroma_db/*
+!data/chroma_db/
+!data/chroma_db/**
 vector_db/
