@@ -16,6 +16,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify RAG artifacts
+        run: |
+          echo "=== Repository files ==="
+          git ls-files data
+
+          echo "=== chunks.csv ==="
+          ls -lh data/processed/chunks.csv
+
+          echo "=== ChromaDB ==="
+          ls -lh data/chroma_db
+
+          echo "=== Dockerignore ==="
+          cat .dockerignore
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
