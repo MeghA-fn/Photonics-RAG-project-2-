@@ -47,11 +47,11 @@ if st.button("Ask"):
 
             api_url = os.getenv(
                 "API_URL",
-                "http://127.0.0.1:8000"
+                "http://photonicsrag-api:8000"
             )
 
             response = requests.post(
-                "http://photonicsrag-api:8000/ask",
+                f"{api_url}/ask",
                 json={
                     "question": question
                 }

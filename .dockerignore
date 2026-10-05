@@ -9,3 +9,10 @@ evaluation/
 data/raw/
 
 README.md
+
+# Keep the RAG artifacts required by the Docker API image
+!data/
+!data/processed/
+!data/processed/chunks.csv
+!data/chroma_db/
+!data/chroma_db/**
