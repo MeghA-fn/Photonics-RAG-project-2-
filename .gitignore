@@ -1,12 +1,19 @@
-.env
+
 venv/
+.git/
 __pycache__/
 *.pyc
+.env
+
+evaluation/
 data/raw/
+
+# Ignore generated processed data except CI artifacts
 data/processed/*
 !data/processed/chunks.csv
 
+# Ignore Chroma files except the tracked CI database
 data/chroma_db/*
-!data/chroma_db/
-!data/chroma_db/**
+!data/chroma_db/chroma.sqlite3
+
 vector_db/
