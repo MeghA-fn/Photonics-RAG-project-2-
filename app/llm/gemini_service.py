@@ -9,19 +9,35 @@ from google import genai
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not GEMINI_API_KEY:
-    raise ValueError("Gemini API Key not found in .env")
+# if not GEMINI_API_KEY:
+#     raise ValueError("Gemini API Key not found in .env")
 
 
 # ============================================================
 # GEMINI CLIENT
 # ============================================================
 
-client = genai.Client(
-    api_key=GEMINI_API_KEY
-)
+client = None
+
+
+def get_gemini_client():
+
+    global client
+
+    if client is None:
+
+        api_key = os.getenv("GEMINI_API_KEY")
+
+        if not api_key:
+            raise RuntimeError(
+                "Gemini API Key not found in .env"
+            )
+
+        client = genai.Client(api_key=api_key)
+
+    return client
 
 
 # ============================================================
@@ -36,14 +52,14 @@ def generate_answer(prompt):
     Retries only temporary failures.
     Quota errors are reported immediately.
     """
-
+    gemini_client = get_gemini_client()
     max_retries = 3
 
     for attempt in range(max_retries):
 
         try:
 
-            response = client.models.generate_content(
+            response = gemini_client.models.generate_content(
                 model="gemini-3.6-flash",
                 contents=prompt
             )
